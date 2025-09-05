@@ -10,7 +10,7 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 # Initialize Homomorphic Encryption context
 HE = Pyfhel()
-HE.contextGen(scheme='bfv', n=4096, t_bits=20, sec=128)  # BFV scheme with proper parameters
+HE.contextGen(scheme='bfv', n=4096, t_bits=20, sec=128)
 HE.keyGen()
 
 @app.route("/", methods=["GET"])
@@ -48,43 +48,45 @@ def train_model():
         
         data = []
         processed_files = 0
-        
+
         for fname in files_in_folder:
             filepath = os.path.join(UPLOAD_FOLDER, fname)
             print(f"Processing file: {filepath}")
-            
+
             try:
                 with open(filepath, "r") as f:
                     file_data_count = 0
                     for line in f:
+                        line = line.strip()
+                        if not line:
+                            continue  # skip empty lines
                         try:
-                            val = int(float(line.strip()))
+                            val = int(float(line))
                             enc_val = HE.encryptInt(val)
                             data.append(enc_val)
                             file_data_count += 1
                         except ValueError as e:
-                            print(f"Skipping invalid line: {line.strip()} - {e}")
+                            print(f"Skipping invalid line: {line} - {e}")
                             continue
-                    
+
                     print(f"Processed {file_data_count} data points from {fname}")
                     if file_data_count > 0:
                         processed_files += 1
-                        
             except Exception as e:
                 print(f"Error processing file {fname}: {e}")
                 continue
-        
+
         if not data:
             return jsonify({
                 "error": "No valid data found to train on",
                 "files_found": len(files_in_folder),
                 "files_processed": processed_files
             }), 400
-        
+
         # Save encrypted data
         joblib.dump(data, "encrypted_data.pkl")
         print(f"✅ Successfully saved {len(data)} encrypted data points")
-        
+
         return jsonify({
             "status": "success",
             "message": "Training completed on encrypted data 🚀",
@@ -92,7 +94,7 @@ def train_model():
             "files_processed": processed_files,
             "files_found": len(files_in_folder)
         })
-    
+
     except Exception as e:
         print(f"Training error: {e}")
         return jsonify({"error": f"Training failed: {e}"}), 500
