@@ -1,68 +1,98 @@
-# cloud_server.py
-import os
-from flask import Flask, request, jsonify
-from Pyfhel import Pyfhel
-import joblib
+# pi_client.py - Raspberry Pi Client for Homomorphic Encryption
+import requests
+import json
+import random
+import time
 
-app = Flask(__name__)
-UPLOAD_FOLDER = "uploads"
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+# 🔥 YOUR ACTUAL RENDER URL
+CLOUD_URL = "https://crypto-hedy.onrender.com"
 
-# Initialize Homomorphic Encryption context
-HE = Pyfhel()
-HE.contextGen(scheme='bfv', n=4096, t_bits=20, sec=128)  # BFV scheme with proper parameters
-HE.keyGen()
-
-@app.route("/", methods=["GET"])
-def home():
-    return jsonify({
-        "message": "Cloud HE Server running 🚀",
-        "upload_endpoint": "/upload",
-        "train_endpoint": "/train"
-    })
-
-@app.route("/upload", methods=["POST"])
-def upload_file():
-    if "file" not in request.files:
-        return jsonify({"error": "No file provided"}), 400
+def generate_sensor_data():
+    """Simulate Raspberry Pi sensor data"""
+    print("📡 Generating sensor data...")
+    data = []
+    for i in range(10):
+        # Simulate temperature readings (20-35°C)
+        temp = round(random.uniform(20.0, 35.0), 2)
+        data.append(temp)
+        time.sleep(0.1)  # Simulate sensor reading delay
     
-    file = request.files["file"]
-    if file.filename == '':
-        return jsonify({"error": "No file selected"}), 400
+    # Save to file
+    with open("sensor_data.txt", "w") as f:
+        for temp in data:
+            f.write(f"{temp}\n")
     
-    filepath = os.path.join(UPLOAD_FOLDER, file.filename)
-    file.save(filepath)
-    return jsonify({"status": "success", "filename": file.filename})
+    print(f"✅ Generated {len(data)} sensor readings")
+    return "sensor_data.txt"
 
-@app.route("/train", methods=["POST"])
-def train_model():
+def upload_to_cloud(filename):
+    """Upload encrypted data to cloud"""
+    print(f"☁️ Uploading {filename} to cloud...")
+    
     try:
-        data = []
-        for fname in os.listdir(UPLOAD_FOLDER):
-            filepath = os.path.join(UPLOAD_FOLDER, fname)
-            with open(filepath, "r") as f:
-                for line in f:
-                    try:
-                        val = int(float(line.strip()))  # Convert to int for BFV scheme
-                        enc_val = HE.encryptInt(val)  # Use encryptInt for BFV
-                        data.append(enc_val)
-                    except:
-                        continue
+        with open(filename, 'rb') as f:
+            files = {'file': f}
+            response = requests.post(f"{CLOUD_URL}/upload", files=files, timeout=30)
         
-        if not data:
-            return jsonify({"error": "No valid data found to train on"}), 400
-        
-        # Save encrypted data
-        joblib.dump(data, "encrypted_data.pkl")
-        return jsonify({
-            "status": "success", 
-            "message": "Training started on encrypted data 🚀",
-            "data_points": len(data)
-        })
-    
+        if response.status_code == 200:
+            result = response.json()
+            print(f"✅ Upload successful: {result}")
+            return result
+        else:
+            print(f"❌ Upload failed: {response.status_code}")
+            return None
     except Exception as e:
-        return jsonify({"error": f"Training failed: {str(e)}"}), 500
+        print(f"❌ Upload error: {str(e)}")
+        return None
+
+def train_on_cloud():
+    """Trigger training on encrypted data"""
+    print("🧠 Starting training on encrypted data...")
+    
+    try:
+        response = requests.post(f"{CLOUD_URL}/train", timeout=60)
+        
+        if response.status_code == 200:
+            result = response.json()
+            print(f"✅ Training successful: {result}")
+            return result
+        else:
+            print(f"❌ Training failed: {response.status_code}")
+            return None
+    except Exception as e:
+        print(f"❌ Training error: {str(e)}")
+        return None
+
+def main():
+    print("🌩️ Connecting Raspberry Pi to Cloud...")
+    print(f"🔗 Cloud URL: {CLOUD_URL}")
+    
+    # Test connection
+    try:
+        response = requests.get(CLOUD_URL, timeout=10)
+        print(f"✅ Cloud connection successful!")
+        print(f"📋 Server info: {response.json()}")
+    except Exception as e:
+        print(f"❌ Cannot connect to cloud: {str(e)}")
+        return
+    
+    # Step 1: Generate sensor data
+    filename = generate_sensor_data()
+    
+    # Step 2: Upload to cloud
+    upload_result = upload_to_cloud(filename)
+    if not upload_result:
+        return
+    
+    # Step 3: Train on encrypted data
+    train_result = train_on_cloud()
+    if not train_result:
+        return
+    
+    print("\n🎉 SUCCESS! Homomorphic Encryption Pipeline Complete!")
+    print("📊 Summary:")
+    print(f"   📤 Upload Response: {upload_result}")
+    print(f"   🧠 Train Response: {train_result}")
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+    main()
