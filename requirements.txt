@@ -1,0 +1,7 @@
+Flask
+requests
+Pyfhel
+pandas
+numpy
+scikit-learn
+joblib
